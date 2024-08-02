@@ -1,5 +1,6 @@
 ---
-- hosts: "{{ target_host }}"
-  remote_user: root
+- name: Upgrade Proxmox VE from 7 to 8
+  hosts: "{{ target-host }}"
+  become: true
   roles:
-    - pve7to8
+    - pve_upgrade

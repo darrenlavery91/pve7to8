@@ -31,11 +31,11 @@ There are no dependancies this uses purely ansible builtin modules
 Example Playbook
 ----------------
 
-'- name: Upgrade Proxmox VE from 7 to 8
+***- name: Upgrade Proxmox VE from 7 to 8
   hosts: "{{ target-host }}"
   become: true
   roles:
-    - pve_upgrade'
+    - pve_upgrade
 
 It is very advisable to run this playbook like this:
 

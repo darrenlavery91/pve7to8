@@ -1,7 +1,7 @@
 Role Name
 =========
 
-This role was used to updreade Proxmox PVE version 7 to 8.
+This role was used to upgrade Proxmox PVE version 7 to 8.
 This is a in place upgrade for Proxmox clusters.
 
 This will stop running vms (if used in production please schedule downtime)

@@ -1,0 +1,45 @@
+---
+- name: Copy get_vmid.sh script
+  ansible.builtin.copy:
+    src: ~/ansible/roles/pve7to8/files/get_vmid.sh
+    dest: /root/get_vmid.sh
+    mode: '0755'
+
+- name: Execute logic script in the background
+  ansible.builtin.shell: /root/get_vmid.sh
+  ignore_errors: true
+
+- name: Fetch vars file
+  ansible.builtin.fetch:
+    src: /root/vc_main.yml
+    dest: ~/ansible/roles/pve7to8/vars/vc_main.yml
+    flat: yes
+
+- name: Clean up the main file on server
+  ansible.builtin.file:
+    path: /root/{{ item }}
+    state: absent
+  loop:
+    - vc_main.yml
+    - get_vmid.sh
+
+- name: Back up all sources
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ item }}.bk"
+    remote_src: yes
+  loop:
+    - /etc/apt/sources.list
+    - /etc/apt/sources.list.d/pve-enterprise.list
+    - /etc/apt/sources.list.d/repo_zabbix_com_zabbix_6_0_debian.list
+    - /etc/apt/sources.list.d/linux.dell.com.sources.list
+    - /etc/network/interfaces
+    - /etc/passwd
+    - /etc/resolv.conf
+  ignore_errors: true
+
+- name: Move backup files to /tmp/
+  ansible.builtin.shell: |
+    mv /etc/apt/*.bk /tmp/
+    mv /etc/apt/sources.list.d/*.bk /tmp/
+

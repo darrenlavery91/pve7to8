@@ -1,0 +1,98 @@
+---
+- name: Stopping VMs
+  ansible.builtin.shell: qm stop "{{ item }}"
+  loop: "{{ vmid }}"
+  register: vms_stopped
+  until: vms_stopped is success
+  retries: 3
+  delay: 30
+
+- name: Waiting for VMs to stop
+  ansible.builtin.wait_for:
+    timeout: 45
+  when: vms_stopped is success
+
+- name: Update GRUB
+  ansible.builtin.command: sudo update-grub
+  async: 1200
+  poll: 0
+  register: update_grub_job
+  when: vms_stopped is success
+
+- name: Wait for GRUB update to finish
+  ansible.builtin.async_status:
+    jid: "{{ update_grub_job.ansible_job_id }}"
+  register: update_grub_result
+  until: update_grub_result.finished
+  retries: 60
+  delay: 20
+
+- name: Check final result
+  ansible.builtin.debug:
+    msg: "Update GRUB completed successfully"
+  when: update_grub_result.rc == 0
+
+- name: Ensure no apt-get processes are running
+  ansible.builtin.shell: |
+    pgrep -x apt-get && killall -9 apt-get
+    pgrep -x apt && killall -9 apt
+    exit 0
+  changed_when: false
+
+- name: Remove leftover lock files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/dpkg/lock-frontend
+    - /var/lib/dpkg/lock
+    - /var/cache/apt/archives/lock
+
+- name: Run dpkg --configure -a
+  ansible.builtin.command: dpkg --configure -a
+
+- name: Update and upgrade apt packages
+  ansible.builtin.apt:
+    upgrade: yes
+    update_cache: yes
+  register: apt_update_result
+  retries: 3
+  delay: 60
+  until: apt_update_result is success
+
+- name: Replace 'bullseye' with 'bookworm'
+  ansible.builtin.replace:
+    path: "{{ item }}"
+    regexp: "bullseye"
+    replace: "bookworm"
+  loop:
+    - /etc/apt/sources.list
+    - /etc/apt/sources.list.d/pve-enterprise.list
+    - /etc/apt/sources.list.d/repo_zabbix_com_zabbix_6_0_debian.list
+    - /etc/apt/sources.list.d/linux.dell.com.sources.list
+  ignore_errors: true
+
+- name: Replace 'buster' with 'bookworm'
+  ansible.builtin.replace:
+    path: "{{ item }}"
+    regexp: "buster"
+    replace: "bookworm"
+  loop:
+    - /etc/apt/sources.list.d/linux.dell.com.sources.list
+  ignore_errors: true
+
+- name: Replace security file
+  ansible.builtin.replace:
+    path: /etc/apt/sources.list
+    regexp: '^deb http://security.debian.org/debian bookworm-updates main contrib'
+    replace: 'deb http://security.debian.org/debian-security bookworm-security main contrib'
+
+- name: Notify to manually upgrade on Proxmox GUI
+  ansible.builtin.debug:
+    msg: "Please manually upgrade on Proxmox GUI"
+
+- name: Update the apt package index
+  ansible.builtin.apt:
+    update_cache: yes
+  ignore_errors: true
+

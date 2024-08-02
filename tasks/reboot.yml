@@ -1,0 +1,45 @@
+---
+- name: Run the checker installer script       
+  ansible.builtin.shell: pve7to8 --full        
+  register: checker_output    
+  changed_when: false   
+
+- name: Check for failures    
+  ansible.builtin.debug:
+    msg: "{{ checker_output.stdout_lines }}"
+  failed_when: "'FAILURES: 0' not in checker_output.stdout"
+  changed_when: false   
+
+- name: Edit network config
+  ansible.builtin.replace: 
+    path: /etc/network/interfaces             
+    regexp: 'eno1'     
+    replace: 'eno1np0' 
+
+- name: Edit network config  
+  ansible.builtin.replace: 
+    path: /etc/network/interfaces
+    regexp: 'eno2'     
+    replace: 'eno2np1' 
+
+- name: Upgrade the OS (apt-get dist-upgrade)  
+  ansible.builtin.apt:  
+    upgrade: dist       
+  register: apt_update  
+
+- name: Reboot the system     
+  ansible.builtin.reboot:     
+
+- name: Wait for SSH to become available after reboot
+  ansible.builtin.wait_for_connection:         
+    delay: 30           
+    timeout: 300        
+
+- name: Check PVE status
+  ansible.builtin.shell: pveversion
+  register: pve_status  
+
+- name: Print PVE status output
+  ansible.builtin.debug:
+    msg: "{{ pve_status.stdout }}"
+

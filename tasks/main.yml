@@ -1,0 +1,12 @@
+---
+# tasks file for pve7to8
+
+- name: Pre-flight Checks
+  include_tasks: pre_flight.yml
+
+- name: Apt Update Tweak
+  include_tasks: apt_update_tweak.yml
+
+- name: Reboot and Check
+  include_tasks: reboot.yml
+

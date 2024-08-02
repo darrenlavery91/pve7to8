@@ -1,5 +1,5 @@
 ---
-- hosts: localhost
+- hosts: "{{ target_host }}"
   remote_user: root
   roles:
     - pve7to8

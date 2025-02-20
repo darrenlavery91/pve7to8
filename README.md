@@ -31,12 +31,13 @@ There are no dependancies this uses purely ansible builtin modules
 Example Playbook
 ----------------
 
-***- name: Upgrade Proxmox VE from 7 to 8
+```
+- name: Upgrade Proxmox VE from 7 to 8
   hosts: "{{ target-host }}"
   become: true
   roles:
     - pve_upgrade
-
+```
 It is very advisable to run this playbook like this:
 
 ansible-playbook pve7to8.yml -e target_host="hostname" --tags "pre_flight,apt_update_tweak"
@@ -62,25 +63,28 @@ example:
 eno1 will cahnge to eno1np0
 eno2 will change to eno2np1
 
-in /etc/network/interfaces
-
+in 
+```
+/etc/network/interfaces
+```
 by default the role changes the interface names to the correct debian 6 version type. 
 
 But I have found that sometimes the new kernel version sticks to the orginal naming, therefore the host will become offline, 
 The fix is to use the idrac, login to the box and check the network interfaces:
 
 Run: to check the network interfaces types 
+```
 root% ip a 
-
+```
 If eno1 and eno2 are being used, reverse the change ansible did:
-
+```
 root% sed -i 's/eno1np0/eno1/g' /etc/networking/interfaces  
 root% sed -i 's/eno2np1/eno2/g' /etc/networking/interfaces
-
+```
 Then restart the network interfaces:
-
+```
 root% systemctl restart networking.services
-
+```
 -------
 Tasks
 -------

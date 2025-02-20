@@ -87,12 +87,20 @@
     regexp: '^deb http://security.debian.org/debian bookworm-updates main contrib'
     replace: 'deb http://security.debian.org/debian-security bookworm-security main contrib'
 
-- name: Notify to manually upgrade on Proxmox GUI
-  ansible.builtin.debug:
-    msg: "Please manually upgrade on Proxmox GUI"
-
-- name: Update the apt package index
+- name: Update apt cache
   ansible.builtin.apt:
-    update_cache: yes
+
+- name: Install all available updates
+  ansible.builtin.apt:
+    upgrade: dist
+    allow_unauthenticated: no
+    force_apt_get: yes
+    cache_valid_time: 3600
+    only_upgrade: yes
+    state: present
+    register: upgrade_result
   ignore_errors: true
 
+- name: Display the upgrade result on the control machine
+  debug:
+    msg: "{{ upgrade_result }}"

@@ -1,0 +1,25 @@
+galaxy_info:
+  author: Darren Lavery
+  description: In-place upgrade role for Proxmox VE clusters - handles both 7->8 and 8->9 (parameterized), stopping VMs, backing up config, repointing apt sources, and rebooting.
+  company: N/A
+
+  license: MIT
+
+  min_ansible_version: "2.14"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+        - trixie
+
+  galaxy_tags:
+    - proxmox
+    - pve
+    - virtualization
+    - upgrade
+    - cluster
+    - system
+
+dependencies: []

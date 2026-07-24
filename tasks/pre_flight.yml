@@ -1,0 +1,58 @@
+---
+- name: Verify cluster quorum before proceeding
+  ansible.builtin.shell: pvecm status | grep -q "Quorate: Yes"
+  register: quorum_check
+  failed_when: false
+  changed_when: false
+  when: require_quorum
+
+- name: Fail if cluster is not quorate
+  ansible.builtin.fail:
+    msg: "Cluster on {{ inventory_hostname }} is not quorate - resolve before upgrading (pvecm status)."
+  when:
+    - require_quorum
+    - quorum_check.rc is defined
+    - quorum_check.rc != 0
+
+# Discovered live on the target - no controller round-trip, no stale
+# vars/main.yml auto-load gap (that gap silently no-op'd VM shutdown
+# in the original role).
+- name: Get running VMIDs
+  ansible.builtin.shell: qm list | awk '$3 == "running" {print $1}'
+  register: running_vmids
+  changed_when: false
+
+- name: Set vmid fact from live host state
+  ansible.builtin.set_fact:
+    vmid: "{{ running_vmids.stdout_lines }}"
+
+- name: Report VMs that will be stopped
+  ansible.builtin.debug:
+    msg: "VMs to stop before upgrade: {{ vmid if vmid | length > 0 else 'none running' }}"
+
+- name: Back up config files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ item }}.bk.{{ pve_upgrade_path }}"
+    remote_src: yes
+  loop: "{{ backup_files }}"
+  ignore_errors: true
+
+- name: Back up /etc/pve (cluster filesystem config)
+  ansible.builtin.shell: >
+    tar czf /tmp/etc-pve-backup-{{ pve_upgrade_path }}-{{ ansible_date_time.iso8601_basic_short }}.tar.gz
+    -C / etc/pve
+  changed_when: true
+  when: pve_backup_etc_pve
+
+- name: Move .bk backup files to /tmp/
+  ansible.builtin.shell: |
+    set -e
+    shopt -s nullglob
+    files=(/etc/apt/*.bk.{{ pve_upgrade_path }} /etc/apt/sources.list.d/*.bk.{{ pve_upgrade_path }})
+    if [ ${#files[@]} -gt 0 ]; then
+      mv "${files[@]}" /tmp/
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: true

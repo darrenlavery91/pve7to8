@@ -1,0 +1,72 @@
+---
+- name: "Run the {{ pve_checker_bin }} checker"
+  ansible.builtin.shell: "{{ pve_checker_bin }} --full"
+  register: checker_output
+  changed_when: false
+  failed_when: false
+
+- name: Show checker output
+  ansible.builtin.debug:
+    msg: "{{ checker_output.stdout_lines }}"
+
+- name: Fail if checker reports failures
+  ansible.builtin.fail:
+    msg: "{{ pve_checker_bin }} reported failures on {{ inventory_hostname }} - resolve before continuing."
+  when: "'FAILURES: 0' not in checker_output.stdout"
+
+- name: Detect current interface names
+  ansible.builtin.command: ip -o link show
+  register: current_links
+  changed_when: false
+  when: fix_interface_naming
+
+# Precise + idempotent: only touches the old name when it's actually present
+# and not already renamed, and won't mangle eno10/eno11/etc via substring
+# matching the way a plain regexp: 'eno1' does.
+- name: Fix interface naming if kernel renamed devices
+  ansible.builtin.replace:
+    path: /etc/network/interfaces
+    regexp: '(?<![0-9a-zA-Z]){{ item.from }}(?!np\d)(?![0-9a-zA-Z])'
+    replace: "{{ item.to }}"
+  loop: "{{ interface_map }}"
+  when:
+    - fix_interface_naming
+    - (item.from ~ ':') in current_links.stdout
+
+- name: Upgrade the OS (apt-get dist-upgrade) on new codename
+  ansible.builtin.apt:
+    upgrade: dist
+  register: apt_update
+
+- name: Reboot the system
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+
+- name: Wait for SSH to become available after reboot
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    timeout: 300
+
+- name: Check PVE status
+  ansible.builtin.shell: pveversion
+  register: pve_status
+  changed_when: false
+
+- name: Print PVE status output
+  ansible.builtin.debug:
+    msg: "{{ pve_status.stdout }}"
+
+- name: Verify cluster quorum after upgrade
+  ansible.builtin.shell: pvecm status | grep -q "Quorate: Yes"
+  register: post_quorum_check
+  failed_when: false
+  changed_when: false
+  when: require_quorum
+
+- name: Warn if cluster not quorate after upgrade
+  ansible.builtin.debug:
+    msg: "WARNING: cluster on {{ inventory_hostname }} is not quorate after upgrade - investigate before moving to the next node."
+  when:
+    - require_quorum
+    - post_quorum_check.rc is defined
+    - post_quorum_check.rc != 0

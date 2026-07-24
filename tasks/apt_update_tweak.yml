@@ -1,0 +1,121 @@
+---
+- name: Stop running VMs before upgrade
+  ansible.builtin.shell: qm stop "{{ item }}"
+  loop: "{{ vmid }}"
+  register: vms_stopped
+  until: vms_stopped is success
+  retries: "{{ vm_stop_retries }}"
+  delay: "{{ vm_stop_delay }}"
+  when: vmid | length > 0
+
+- name: Wait until VMs actually report stopped (poll, not blind sleep)
+  ansible.builtin.shell: qm list | awk -v id="{{ item }}" '$1==id {print $3}'
+  register: vm_state
+  until: vm_state.stdout == "stopped"
+  retries: "{{ vm_stop_poll_retries }}"
+  delay: "{{ vm_stop_poll_delay }}"
+  loop: "{{ vmid }}"
+  changed_when: false
+  when: vmid | length > 0
+
+- name: Update GRUB
+  ansible.builtin.command: update-grub
+  async: 1200
+  poll: 0
+  register: update_grub_job
+  changed_when: true
+
+- name: Wait for GRUB update to finish
+  ansible.builtin.async_status:
+    jid: "{{ update_grub_job.ansible_job_id }}"
+  register: update_grub_result
+  until: update_grub_result.finished
+  retries: 60
+  delay: 20
+
+- name: Check GRUB update result
+  ansible.builtin.debug:
+    msg: "update-grub completed successfully"
+  when: update_grub_result.rc == 0
+
+- name: Check for active apt/dpkg processes
+  ansible.builtin.shell: pgrep -x apt-get; pgrep -x apt; pgrep -x dpkg; exit 0
+  register: apt_procs
+  changed_when: false
+
+# Do NOT killall -9 apt/dpkg mid-transaction - that's how a dpkg database
+# gets corrupted. If something is genuinely stuck, resolve it manually
+# (check `ps aux`, `journalctl -u apt-daily`, etc.) and re-run.
+- name: Fail if apt/dpkg processes are still active
+  ansible.builtin.fail:
+    msg: >
+      apt/dpkg processes still running on {{ inventory_hostname }}:
+      {{ apt_procs.stdout_lines }}. Investigate and resolve manually
+      (do not force-kill - it risks a corrupt dpkg database) then re-run.
+  when: apt_procs.stdout_lines | length > 0
+
+- name: Remove leftover lock files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/dpkg/lock-frontend
+    - /var/lib/dpkg/lock
+    - /var/cache/apt/archives/lock
+
+- name: Run dpkg --configure -a
+  ansible.builtin.command: dpkg --configure -a
+  changed_when: false
+
+- name: Update and upgrade apt packages on current release
+  ansible.builtin.apt:
+    upgrade: yes
+    update_cache: yes
+  register: apt_update_result
+  retries: 3
+  delay: 60
+  until: apt_update_result is success
+
+- name: Repoint primary codename in sources files
+  ansible.builtin.replace:
+    path: "{{ item }}"
+    regexp: '\b{{ pve_from_codename }}\b'
+    replace: "{{ pve_to_codename }}"
+  loop: "{{ apt_sources_files }}"
+  ignore_errors: true
+
+- name: Repoint extra legacy codenames in sources files
+  ansible.builtin.replace:
+    path: "{{ item.0 }}"
+    regexp: '\b{{ item.1 }}\b'
+    replace: "{{ pve_to_codename }}"
+  loop: "{{ apt_sources_files | product(pve_extra_from_codenames) | list }}"
+  ignore_errors: true
+  when: pve_extra_from_codenames | length > 0
+
+- name: Fix Debian security repo line (7to8 path only)
+  ansible.builtin.replace:
+    path: /etc/apt/sources.list
+    regexp: '^deb http://security.debian.org/debian {{ pve_to_codename }}-updates main contrib'
+    replace: 'deb http://security.debian.org/debian-security {{ pve_to_codename }}-security main contrib'
+  when: pve_fix_security_line
+
+- name: Refresh apt cache against new codename
+  ansible.builtin.apt:
+    update_cache: yes
+
+# register was previously (incorrectly) nested inside the apt module's
+# own argument block, which meant upgrade_result was never actually
+# set and the debug task below failed with an undefined variable.
+- name: Install all available updates on new codename
+  ansible.builtin.apt:
+    upgrade: dist
+    force_apt_get: yes
+    only_upgrade: yes
+    state: present
+  register: upgrade_result
+  ignore_errors: true
+
+- name: Display the upgrade result
+  ansible.builtin.debug:
+    msg: "{{ upgrade_result }}"

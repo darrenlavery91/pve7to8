@@ -1,0 +1,29 @@
+---
+# tasks file for pve_upgrade
+
+- name: Validate upgrade path selection
+  ansible.builtin.assert:
+    that:
+      - pve_upgrade_path in pve_upgrade_paths
+    fail_msg: "pve_upgrade_path must be one of: {{ pve_upgrade_paths.keys() | list }} (got '{{ pve_upgrade_path }}')"
+    success_msg: "Running upgrade path: {{ pve_upgrade_path }}"
+
+- name: Set active path facts
+  ansible.builtin.set_fact:
+    pve_from_codename: "{{ pve_upgrade_paths[pve_upgrade_path].from_codename }}"
+    pve_to_codename: "{{ pve_upgrade_paths[pve_upgrade_path].to_codename }}"
+    pve_extra_from_codenames: "{{ pve_upgrade_paths[pve_upgrade_path].extra_from_codenames }}"
+    pve_checker_bin: "{{ pve_upgrade_paths[pve_upgrade_path].checker_bin }}"
+    pve_fix_security_line: "{{ pve_upgrade_paths[pve_upgrade_path].fix_security_line }}"
+
+- name: Pre-flight checks
+  ansible.builtin.include_tasks: pre_flight.yml
+  tags: [pre_flight]
+
+- name: Apt update / codename repoint
+  ansible.builtin.include_tasks: apt_update_tweak.yml
+  tags: [apt_update_tweak]
+
+- name: Reboot and post-upgrade checks
+  ansible.builtin.include_tasks: reboot.yml
+  tags: [reboot]

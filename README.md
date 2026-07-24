@@ -110,6 +110,7 @@ Runs the pve7to8 checker installer script.
   Upgrades the OS using apt-get dist-upgrade.
   Reboots the system and waits for SSH to become available.
   Checks and prints Proxmox VE status.
+  Please check out my git new branch for pve7to9
 
 
 License

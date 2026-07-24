@@ -1,0 +1,7 @@
+---
+- name: Upgrade Proxmox VE (7->8 or 8->9)
+  hosts: "{{ target_host }}"
+  become: true
+  serial: 1   # enforced, not just documented - never touch more than one node at a time
+  roles:
+    - pve_upgrade

@@ -1,6 +1,0 @@
----
-- name: Upgrade Proxmox VE from 7 to 8
-  hosts: "{{ target-host }}"
-  become: true
-  roles:
-    - pve_upgrade

@@ -1,5 +1,62 @@
 ---
-# defaults file for pve7to8
-vmid: []
+# defaults file for pve_upgrade
+
+# Host(s) targeted at invocation time via -e target_host="hostname"
 target_host: ""
 
+# Which upgrade to run: "7to8" or "8to9"
+# Proxmox does not support skipping major versions - a 7.x host must go
+# 7 -> 8 -> 9 as two separate, sequential runs of this role.
+pve_upgrade_path: "7to8"
+
+pve_upgrade_paths:
+  7to8:
+    from_codename: bullseye
+    to_codename: bookworm
+    extra_from_codenames:
+      - buster
+    checker_bin: pve7to8
+    fix_security_line: true
+  8to9:
+    from_codename: bookworm
+    to_codename: trixie
+    extra_from_codenames: []
+    checker_bin: pve8to9
+    fix_security_line: false
+
+# apt source files to repoint from the old codename to the new one
+apt_sources_files:
+  - /etc/apt/sources.list
+  - /etc/apt/sources.list.d/pve-enterprise.list
+  - /etc/apt/sources.list.d/repo_zabbix_com_zabbix_6_0_debian.list
+  - /etc/apt/sources.list.d/linux.dell.com.sources.list
+
+# Files backed up (with .bk.<path> suffix) before any changes are made
+backup_files:
+  - /etc/apt/sources.list
+  - /etc/apt/sources.list.d/pve-enterprise.list
+  - /etc/apt/sources.list.d/repo_zabbix_com_zabbix_6_0_debian.list
+  - /etc/apt/sources.list.d/linux.dell.com.sources.list
+  - /etc/network/interfaces
+  - /etc/passwd
+  - /etc/resolv.conf
+
+# Cluster config filesystem - required backup per Proxmox upgrade docs
+pve_backup_etc_pve: true
+
+# Interface renaming safety net - kernel bumps can add npX suffixes.
+# Only applied if the *old* name is actually present on the host.
+fix_interface_naming: true
+interface_map:
+  - from: eno1
+    to: eno1np0
+  - from: eno2
+    to: eno2np1
+
+# Cluster safety checks - set false for standalone (non-clustered) hosts
+require_quorum: true
+
+vm_stop_retries: 3
+vm_stop_delay: 30
+vm_stop_poll_retries: 12
+vm_stop_poll_delay: 5
